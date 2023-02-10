@@ -1,0 +1,98 @@
+#include "thingProperties.h"
+//------------------------- DHT22 temp & humidity sensor ---------------------//
+#include "DHT.h"
+#define DHTPIN 23
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+//-------------------------------- smoke sensor ------------------------------//
+#define MQ2pin 26
+#define MQ9pin 25
+//-------------------------------- dust sensor -------------------------------//
+#define ledPower  24
+#define measurePin  23
+unsigned int samplingTime = 280;
+unsigned int deltaTime = 40;
+unsigned int sleepTime = 9680;
+
+float dustDensity = 0;
+float calcVoltage = 0;
+float voMeasured = 0;
+
+int System;
+
+void setup() {
+  Serial.begin(9600);       //initialization serial monitor
+  dht.begin();              //initialization dht22 module
+  pinMode(ledPower,OUTPUT); 
+  delay(1500);
+  
+  initProperties();
+  ArduinoCloud.begin(ArduinoIoTPreferredConnection);
+  setDebugMessageLevel(2);
+  ArduinoCloud.printDebugInfo();
+}
+
+void loop() {
+
+  ArduinoCloud.update();
+  
+  if(System == 1){
+  //---------------------------------dht22---------------------------------------------//
+  
+  float h = dht.readHumidity();    //reading humidity from dht22
+  float t = dht.readTemperature(); //reading temp from dht22
+  temp = t;                        //declaring variable in the t to temp in the cloud
+  humidity = h;                    //declaring variable in the h to humidity in the cloud 
+  
+  
+  //---------------------------------smoke sensor---------------------------------------//
+  int gas = analogRead(MQ2pin);
+  co_level = gas;
+  
+  
+  //------------------------------------------------------------------------------------// 
+  float sensor_volt; 
+  float RS_gas; 
+  float ratio; 
+  float R0 = 0.91; //value after calibration
+ 
+  int sensorValue = analogRead(MQ9pin); 
+  sensor_volt = ((float)sensorValue / 1024) * 5.0; 
+  RS_gas = (5.0 - sensor_volt) / sensor_volt; 
+  ratio = RS_gas / R0; // ratio = RS/R0 
+  
+  
+  if(ratio >= 800 || gas >=800){
+    digitalWrite(14,HIGH);
+  }else{
+    digitalWrite(14,LOW);
+  }
+  
+  
+  //----------------------------------dust sensor---------------------------------------//
+  digitalWrite(ledPower,LOW);
+  delayMicroseconds(samplingTime);
+
+  voMeasured = analogRead(measurePin);
+
+  delayMicroseconds(deltaTime);
+  digitalWrite(ledPower,HIGH);
+  delayMicroseconds(sleepTime);
+
+  calcVoltage = voMeasured*(5.0/1024);
+  dustDensity = 0.17*calcVoltage-0.1;
+
+  if ( dustDensity < 0)
+  {
+    dustDensity = 0.00;
+  }
+  
+  dust = dustDensity;
+
+  delay(2000);
+}
+}
+
+void onStatusChange()  {
+  System = status;
+}
